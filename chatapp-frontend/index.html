@@ -165,8 +165,8 @@
           updateStatus("Match gevonden! Verbinding maken...");
 
           if (data.initiator) {
-            setTimeout(() => {
-              conn = peer.connect(data.partnerId);
+            conn = peer.connect(data.partnerId);
+            conn.on("open", () => {
               setupDataListeners();
 
               currentCall = peer.call(data.partnerId, localStream);
@@ -174,7 +174,7 @@
                 document.getElementById("peerVideo").srcObject = remoteStream;
                 document.getElementById("screen-btn").disabled = false;
               });
-            }, 500);
+            });
           }
         });
       }
