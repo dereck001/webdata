@@ -1243,7 +1243,18 @@
 
         // Incoming data connection
         peer.on("connection", (conn) => {
-          setupConn(conn);
+          conn.on("open", () => {
+            const p = peers.get(conn.peer);
+            if (p) {
+              p.conn = conn;
+              // If this peer is data-only (no call will come), show their tile now
+              if (p.mode === "data") {
+                addDataPeerTile(conn.peer, p.name);
+                setStatus("Verbonden (" + (peers.size + 1) + " deeln.)", "ok");
+              }
+            }
+            setupConn(conn);
+          });
         });
 
         socket.on("joined", ({ participantCount }) => {
@@ -1303,13 +1314,12 @@
       }
 
       function connectToPeer(peerId, name, mode) {
-        // Data channel
         const conn = peer.connect(peerId, { reliable: true });
         conn.on("open", () => {
           const p = peers.get(peerId);
           if (p) p.conn = conn;
           setupConn(conn);
-          // Call with media
+
           if (localStream) {
             const call = peer.call(peerId, localStream);
             if (p) p.call = call;
@@ -1321,8 +1331,9 @@
             });
             call.on("close", () => removePeerTile(peerId));
           } else {
-            // data-only: still show placeholder
+            // data-only mode: no call, show placeholder tile on conn open
             addDataPeerTile(peerId, name);
+            setStatus("Verbonden (" + (peers.size + 1) + " deeln.)", "ok");
           }
         });
         conn.on("error", (e) => console.error("conn err", e));
@@ -1330,7 +1341,6 @@
 
       function setupConn(conn) {
         const peerId = conn.peer;
-        peers.get(peerId) && (peers.get(peerId).conn = conn);
 
         conn.on("data", (data) => {
           if (data.type === "chat") {
@@ -1346,6 +1356,7 @@
               received: 0,
             };
             addFileItem(data.id, data.name, data.size, null, true);
+            if (currentPanel !== "files") openPanel("files");
           }
           if (data.type === "file-chunk") {
             const f = fileChunks[data.id];
@@ -1368,6 +1379,11 @@
             if (p) p.muted = data.muted;
             updateMutedIndicator(peerId, data.muted);
           }
+        });
+
+        conn.on("close", () => {
+          const p = peers.get(peerId);
+          if (p) p.conn = null;
         });
       }
 
