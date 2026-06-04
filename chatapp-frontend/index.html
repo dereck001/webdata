@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anonieme Matchmaking Chat</title>
+    <!-- Externe libraries inladen via CDN -->
+    <script src="https://unpkg.com"></script>
+    <script src="https://socket.io"></script>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background: #f4f4f9; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .status-bar { background: #e3f2fd; padding: 10px; border-radius: 4px; margin-bottom: 20px; font-weight: bold; text-align: center; }
+        .video-container { display: flex; gap: 10px; margin-bottom: 20px; }
+        video { width: 48%; background: #000; border-radius: 4px; transform: scaleX(-1); }
+        #peerVideo { transform: none; }
+        .chat-box { border: 1px solid #ccc; height: 150px; overflow-y: scroll; padding: 10px; margin-bottom: 10px; background: #fafafa; }
+        .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        button, input[type="file"] { padding: 10px; cursor: pointer; }
+        .next-btn { background: #ff5722; color: white; border: none; border-radius: 4px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Anonieme WebRTC Matchmaker</h2>
+    <div class="status-bar" id="status">Systeem opstarten...</div>
+    
+    <div class="controls">
+        <button class="next-btn" onclick="startMatchmaking()">Volgende Vreemde ➔</button>
+        <button id="screen-btn" onclick="shareScreen()" disabled>Deel Scherm</button>
+    </div>
+
+    <div class="video-container">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <video id="peerVideo" autoplay playsinline></video>
+    </div>
+
+    <div class="chat-box" id="chatBox"></div>
+    
+    <div class="controls">
+        <input type="text" id="msgInput" placeholder="Typ een bericht..." style="flex: 1;" onkeypress="if(event.key === 'Enter') sendMessage()">
+        <button onclick="sendMessage()">Verzend</button>
+    </div>
+
+    <div class="controls">
+        <label>Bestand delen (P2P):</label>
+        <input type="file" id="fileInput" onchange="sendFile()">
+    </div>
+</div>
+
+<script>
+    let socket;
+    let peer;
+    let conn; 
+    let currentCall; 
+    let localStream;
+
+    setupLocalVideo();
+
+    async function setupLocalVideo() {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+            initConnections();
+        } catch (err) {
+            updateStatus("Cameratoegang geweigerd of niet gevonden.");
+            console.error(err);
+        }
+    }
+
+    function initConnections() {
+        // BELANGRIJK: Vervang de URL hieronder met je live Render URL zodra je backend online staat!
+        socket = io("https://onrender.com"); 
+
+        peer = new Peer();
+
+        peer.on('open', (id) => {
+            updateStatus("Klaar om te zoeken. Klik op 'Volgende Vreemde'.");
+        });
+
+        peer.on('connection', (connection) => { conn = connection; setupDataListeners(); });
+        peer.on('call', (call) => {
+            currentCall = call;
+            call.answer(localStream);
+            call.on('stream', (remoteStream) => {
+                document.getElementById('peerVideo').srcObject = remoteStream;
+                document.getElementById('screen-btn').disabled = false;
+            });
+        });
+
+        socket.on('waiting', (msg) => {
+            updateStatus(msg);
+            resetPeerInterface();
+        });
+
+        socket.on('matched', (data) => {
+            updateStatus("Match gevonden! Verbinding maken...");
+            
+            if (data.initiator) {
+                setTimeout(() => { 
+                    conn = peer.connect(data.partnerId);
+                    setupDataListeners();
+
+                    currentCall = peer.call(data.partnerId, localStream);
+                    currentCall.on('stream', (remoteStream) => {
+                        document.getElementById('peerVideo').srcObject = remoteStream;
+                        document.getElementById('screen-btn').disabled = false;
+                    });
+                }, 500);
+            }
+        });
+    }
+
+    function startMatchmaking() {
+        if (!peer || !peer.id) return alert("PeerJS is nog niet klaar.");
+        if (conn) conn.close();
+        if (currentCall) currentCall.close();
+        
+        document.getElementById('chatBox').innerHTML = ""; 
+        socket.emit('join-matchmaking', peer.id);
+    }
+
+    function setupDataListeners() {
+        conn.on('open', () => { updateStatus("Verbonden met een vreemde!"); });
+        conn.on('data', (data) => {
+            if (data.type === 'text') appendMessage("Vreemde", data.message);
+            if (data.type === 'file') {
+                const blob = new Blob([data.fileData], { type: data.fileType });
+                const url = URL.createObjectURL(blob);
+                const link = `<a href="${url}" download="${data.fileName}">Download ${data.fileName}</a>`;
+                appendMessage("Vreemde stuurde bestand", link);
+            }
+        });
+        conn.on('close', () => {
+            updateStatus("Vreemde heeft de chat verlaten.");
+            resetPeerInterface();
+        });
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('msgInput');
+        if (!conn || !input.value) return;
+        conn.send({ type: 'text', message: input.value });
+        appendMessage("Jij", input.value);
+        input.value = '';
+    }
+
+    function sendFile() {
+        const fileInput = document.getElementById('fileInput');
+        const file = fileInput.files[0];
+        if (!file || !conn) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            conn.send({
+                type: 'file',
+                fileData: event.target.result,
+                fileName: file.name,
+                fileType: file.type
+            });
+            appendMessage("Jij", `Bestand verzonden: ${file.name}`);
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    async function shareScreen() {
+        try {
+            const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const videoTrack = screenStream.getVideoTracks()[0];
+            const sender = currentCall.peerConnection.getSenders().find(s => s.track.kind === 'video');
+            sender.replaceTrack(videoTrack);
+            document.getElementById('localVideo').srcObject = screenStream;
+
+            videoTrack.onended = () => {
+                const localVideoTrack = localStream.getVideoTracks()[0];
+                sender.replaceTrack(localVideoTrack);
+                document.getElementById('localVideo').srcObject = localStream;
+            };
+        } catch (err) { console.error(err); }
+    }
+
+    function resetPeerInterface() {
+        document.getElementById('peerVideo').srcObject = null;
+        document.getElementById('screen-btn').disabled = true;
+    }
+
+    function updateStatus(msg) { document.getElementById('status').innerText = msg; }
+    function appendMessage(sender, message) {
+        const chatBox = document.getElementById('chatBox');
+        chatBox.innerHTML += `<p><strong>${sender}:</strong> ${message}</p>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
+</body>
+</html>
+
