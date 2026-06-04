@@ -7,157 +7,525 @@
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
       body {
         font-family: sans-serif;
-        margin: 20px;
-        background: #f4f4f9;
+        background: #0f0f0f;
+        color: #fff;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
       }
-      .container {
-        max-width: 800px;
-        margin: auto;
-        background: white;
+
+      /* LOBBY */
+      #lobby {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        gap: 24px;
         padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
       }
-      .status-bar {
-        background: #e3f2fd;
-        padding: 10px;
-        border-radius: 4px;
-        margin-bottom: 20px;
-        font-weight: bold;
+      #lobby h1 {
+        font-size: 24px;
+        font-weight: 600;
+      }
+      #lobby p {
+        color: #aaa;
+        font-size: 14px;
         text-align: center;
       }
-      .link-box {
+      .lobby-card {
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 24px;
+        width: 100%;
+        max-width: 420px;
         display: flex;
-        gap: 8px;
-        margin-bottom: 20px;
+        flex-direction: column;
+        gap: 16px;
       }
-      .link-box input {
-        flex: 1;
-        padding: 10px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
+      .lobby-card label {
         font-size: 13px;
-        background: #f9f9f9;
+        color: #aaa;
+        margin-bottom: 4px;
+        display: block;
       }
-      .video-container {
+      .lobby-card input {
+        width: 100%;
+        padding: 10px 14px;
+        background: #111;
+        border: 1px solid #333;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 15px;
+        outline: none;
+      }
+      .lobby-card input:focus {
+        border-color: #555;
+      }
+      .btn-primary {
+        padding: 12px;
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 500;
+        cursor: pointer;
+        width: 100%;
+      }
+      .btn-primary:hover {
+        background: #1d4ed8;
+      }
+      .divider {
         display: flex;
-        gap: 10px;
-        margin-bottom: 20px;
+        align-items: center;
+        gap: 12px;
+        color: #444;
+        font-size: 13px;
       }
-      video {
-        width: 48%;
+      .divider::before,
+      .divider::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: #2a2a2a;
+      }
+      .lobby-status {
+        font-size: 13px;
+        color: #aaa;
+        text-align: center;
+        min-height: 18px;
+      }
+
+      /* CALL */
+      #call-view {
+        display: none;
+        flex-direction: column;
+        flex: 1;
+        overflow: hidden;
+      }
+      .video-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        flex: 1;
         background: #000;
-        border-radius: 4px;
+        overflow: hidden;
+      }
+      .video-wrapper {
+        position: relative;
+        background: #111;
+        overflow: hidden;
+      }
+      .video-wrapper video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
       }
       #localVideo {
         transform: scaleX(-1);
       }
-      .chat-box {
-        border: 1px solid #ccc;
-        height: 150px;
-        overflow-y: scroll;
-        padding: 10px;
-        margin-bottom: 10px;
-        background: #fafafa;
+      .video-label {
+        position: absolute;
+        bottom: 10px;
+        left: 12px;
+        background: rgba(0, 0, 0, 0.55);
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        color: #fff;
       }
-      .controls {
+      .muted-overlay {
+        display: none;
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        color: #aaa;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .muted-overlay svg {
+        width: 32px;
+        height: 32px;
+        stroke: #aaa;
+        fill: none;
+        stroke-width: 1.5;
+      }
+
+      /* CONTROLS BAR */
+      .controls-bar {
+        background: #1a1a1a;
+        border-top: 1px solid #2a2a2a;
         display: flex;
-        gap: 10px;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 14px;
         flex-wrap: wrap;
-        margin-bottom: 10px;
       }
-      button,
-      input[type="file"] {
-        padding: 10px;
+      .ctrl-btn {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: 1px solid #333;
+        background: #2a2a2a;
+        color: #fff;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s;
+      }
+      .ctrl-btn:hover {
+        background: #333;
+      }
+      .ctrl-btn.active {
+        background: #ef4444;
+        border-color: #ef4444;
+      }
+      .ctrl-btn svg {
+        width: 20px;
+        height: 20px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .ctrl-btn-end {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #ef4444;
+        border: none;
+        color: #fff;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .ctrl-btn-end svg {
+        width: 22px;
+        height: 22px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* CHAT PANEL */
+      .chat-panel {
+        display: none;
+        flex-direction: column;
+        background: #141414;
+        border-left: 1px solid #2a2a2a;
+        width: 300px;
+        flex-shrink: 0;
+      }
+      .chat-panel.open {
+        display: flex;
+      }
+      .chat-header {
+        padding: 14px 16px;
+        font-size: 14px;
+        font-weight: 500;
+        border-bottom: 1px solid #2a2a2a;
+      }
+      .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .chat-msg {
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .chat-msg .sender {
+        font-weight: 500;
+        color: #aaa;
+        margin-bottom: 2px;
+        font-size: 12px;
+      }
+      .chat-msg .bubble {
+        background: #222;
+        padding: 8px 12px;
+        border-radius: 8px;
+        color: #e5e5e5;
+      }
+      .chat-msg.mine .bubble {
+        background: #1d4ed8;
+      }
+      .chat-input-row {
+        display: flex;
+        gap: 8px;
+        padding: 12px;
+        border-top: 1px solid #2a2a2a;
+      }
+      .chat-input-row input {
+        flex: 1;
+        padding: 8px 12px;
+        background: #222;
+        border: 1px solid #333;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 13px;
+        outline: none;
+      }
+      .chat-input-row button {
+        padding: 8px 14px;
+        background: #2563eb;
+        border: none;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 13px;
         cursor: pointer;
       }
-      .copy-btn {
-        background: #1976d2;
-        color: white;
-        border: none;
-        border-radius: 4px;
+
+      /* SIDE LAYOUT */
+      .call-body {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
       }
-      .end-btn {
-        background: #e53935;
-        color: white;
-        border: none;
-        border-radius: 4px;
+      .call-body .video-grid {
+        flex: 1;
+      }
+
+      /* LINK BAR */
+      .link-bar {
+        background: #1a1a1a;
+        border-bottom: 1px solid #2a2a2a;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px;
+        font-size: 13px;
+      }
+      .link-bar span {
+        color: #aaa;
+        flex-shrink: 0;
+      }
+      .link-bar input {
+        flex: 1;
+        background: #111;
+        border: 1px solid #2a2a2a;
+        border-radius: 6px;
+        color: #ccc;
+        padding: 5px 10px;
+        font-size: 12px;
+        outline: none;
+      }
+      .link-bar button {
+        padding: 5px 12px;
+        background: #2a2a2a;
+        border: 1px solid #333;
+        border-radius: 6px;
+        color: #fff;
+        font-size: 12px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .link-bar button:hover {
+        background: #333;
+      }
+      #call-status {
+        color: #888;
+        font-size: 12px;
+        white-space: nowrap;
       }
     </style>
   </head>
   <body>
-    <div class="container">
-      <h2>Privé Video Call</h2>
-      <div class="status-bar" id="status">Opstarten...</div>
-
-      <div class="link-box">
-        <input
-          type="text"
-          id="roomLink"
-          readonly
-          placeholder="Link wordt gegenereerd..."
-        />
-        <button class="copy-btn" onclick="copyLink()">Kopieer link</button>
-        <button class="end-btn" onclick="endCall()">Verbreek</button>
-      </div>
-
-      <div class="controls">
-        <button id="screen-btn" onclick="shareScreen()" disabled>
-          Deel scherm
+    <!-- LOBBY SCHERM -->
+    <div id="lobby">
+      <h1>Privé Video Call</h1>
+      <p>Maak een nieuwe room aan of voer een room ID in om deel te nemen.</p>
+      <div class="lobby-card">
+        <div>
+          <label>Room ID</label>
+          <input type="text" id="roomInput" placeholder="bijv. abc1234" />
+        </div>
+        <button class="btn-primary" onclick="joinRoom()">
+          Deelnemen aan room
         </button>
+        <div class="divider">of</div>
+        <button
+          class="btn-primary"
+          style="background: #16a34a"
+          onclick="createRoom()"
+        >
+          Nieuwe room aanmaken
+        </button>
+        <div class="lobby-status" id="lobbyStatus"></div>
       </div>
+    </div>
 
-      <div class="video-container">
-        <video id="localVideo" autoplay muted playsinline></video>
-        <video id="peerVideo" autoplay playsinline></video>
+    <!-- CALL SCHERM -->
+    <div id="call-view">
+      <div class="link-bar">
+        <span>Room:</span>
+        <input type="text" id="roomLink" readonly />
+        <button onclick="copyLink()">Kopieer link</button>
+        <span id="call-status">Wachten...</span>
       </div>
-
-      <div class="chat-box" id="chatBox"></div>
-      <div class="controls">
-        <input
-          type="text"
-          id="msgInput"
-          placeholder="Typ een bericht..."
-          style="flex: 1"
-          onkeypress="if (event.key === 'Enter') sendMessage();"
-        />
-        <button onclick="sendMessage()">Verzend</button>
+      <div class="call-body">
+        <div class="video-grid">
+          <div class="video-wrapper">
+            <video id="localVideo" autoplay muted playsinline></video>
+            <div class="video-label">Jij</div>
+            <div class="muted-overlay" id="videoOffOverlay">
+              <svg viewBox="0 0 24 24">
+                <path d="M23 7 16 12 23 17V7z" />
+                <rect x="1" y="5" width="15" height="14" rx="2" />
+                <line x1="1" y1="1" x2="23" y2="23" />
+              </svg>
+              Camera uit
+            </div>
+          </div>
+          <div class="video-wrapper">
+            <video id="peerVideo" autoplay playsinline></video>
+            <div class="video-label">Gast</div>
+          </div>
+        </div>
+        <div class="chat-panel" id="chatPanel">
+          <div class="chat-header">Chat</div>
+          <div class="chat-messages" id="chatMessages"></div>
+          <div class="chat-input-row">
+            <input
+              type="text"
+              id="msgInput"
+              placeholder="Typ een bericht..."
+              onkeypress="if (event.key === 'Enter') sendMessage();"
+            />
+            <button onclick="sendMessage()">Stuur</button>
+          </div>
+        </div>
       </div>
-      <div class="controls">
-        <label>Bestand (P2P):</label>
-        <input type="file" id="fileInput" onchange="sendFile()" />
+      <div class="controls-bar">
+        <button
+          class="ctrl-btn"
+          id="muteBtn"
+          onclick="toggleMute()"
+          title="Microfoon"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+        </button>
+        <button
+          class="ctrl-btn"
+          id="videoBtn"
+          onclick="toggleVideo()"
+          title="Camera"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M23 7 16 12 23 17V7z" />
+            <rect x="1" y="5" width="15" height="14" rx="2" />
+          </svg>
+        </button>
+        <button
+          class="ctrl-btn"
+          id="screenBtn"
+          onclick="shareScreen()"
+          title="Deel scherm"
+          disabled
+        >
+          <svg viewBox="0 0 24 24">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path d="M8 21h8M12 17v4" />
+          </svg>
+        </button>
+        <button
+          class="ctrl-btn"
+          id="chatBtn"
+          onclick="toggleChat()"
+          title="Chat"
+        >
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+            />
+          </svg>
+        </button>
+        <button class="ctrl-btn-end" onclick="endCall()" title="Verbreek call">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.42 19.42 0 0 1 4.26 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.17 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.15 9.9a16 16 0 0 0 3.53 3.41z"
+            />
+            <line x1="1" y1="1" x2="23" y2="23" />
+          </svg>
+        </button>
       </div>
     </div>
 
     <script>
       let socket, peer, conn, currentCall, localStream;
-      let roomId;
+      let roomId,
+        isMuted = false,
+        isVideoOff = false,
+        isSharingScreen = false;
 
-      window.onload = async function () {
-        // Haal roomId uit URL of genereer een nieuwe
-        const params = new URLSearchParams(window.location.search);
-        roomId = params.get("room") || Math.random().toString(36).slice(2, 9);
+      function lobbyStatus(msg) {
+        document.getElementById("lobbyStatus").textContent = msg;
+      }
+      function callStatus(msg) {
+        document.getElementById("call-status").textContent = msg;
+      }
 
-        // Update URL zonder reload zodat de link deelbaar is
-        if (!params.get("room")) {
-          history.replaceState(null, "", `?room=${roomId}`);
+      function createRoom() {
+        const id = Math.random().toString(36).slice(2, 9);
+        document.getElementById("roomInput").value = id;
+        lobbyStatus("Room ID gegenereerd. Klik op deelnemen.");
+      }
+
+      async function joinRoom() {
+        const input = document.getElementById("roomInput").value.trim();
+        if (!input) {
+          lobbyStatus("Vul een room ID in.");
+          return;
         }
-
-        document.getElementById("roomLink").value = window.location.href;
-
+        roomId = input;
+        lobbyStatus("Camera ophalen...");
         try {
           localStream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: true,
           });
           document.getElementById("localVideo").srcObject = localStream;
+          showCallView();
           initConnections();
-        } catch (err) {
-          updateStatus("Cameratoegang geweigerd of niet gevonden.");
+        } catch (e) {
+          lobbyStatus("Cameratoegang geweigerd.");
         }
-      };
+      }
+
+      function showCallView() {
+        document.getElementById("lobby").style.display = "none";
+        document.getElementById("call-view").style.display = "flex";
+        const url =
+          window.location.origin + window.location.pathname + "?room=" + roomId;
+        document.getElementById("roomLink").value = url;
+        history.replaceState(null, "", "?room=" + roomId);
+      }
 
       function initConnections() {
         socket = io("https://webdata-backend.onrender.com");
@@ -167,24 +535,34 @@
           socket.emit("join-room", { roomId, peerId: id });
         });
 
-        peer.on("call", (call) => {
-          currentCall = call;
-          call.answer(localStream);
-          call.on("stream", (remoteStream) => {
-            document.getElementById("peerVideo").srcObject = remoteStream;
-            document.getElementById("screen-btn").disabled = false;
-          });
-        });
-
         peer.on("connection", (connection) => {
           conn = connection;
           setupDataListeners();
         });
 
-        socket.on("waiting", (msg) => updateStatus(msg));
+        peer.on("call", (call) => {
+          currentCall = call;
+          call.answer(localStream);
+          call.on("stream", (remoteStream) => {
+            document.getElementById("peerVideo").srcObject = remoteStream;
+            document.getElementById("screenBtn").disabled = false;
+            callStatus("Verbonden");
+          });
+        });
+
+        socket.on("waiting", () => callStatus("Wachten op deelnemer..."));
+        socket.on("room-full", (msg) => {
+          callStatus(msg);
+          alert(msg);
+        });
+        socket.on("peer-left", (msg) => {
+          callStatus(msg);
+          document.getElementById("peerVideo").srcObject = null;
+          document.getElementById("screenBtn").disabled = true;
+        });
 
         socket.on("matched", (data) => {
-          updateStatus("Match gevonden! Verbinding maken...");
+          callStatus("Verbinding maken...");
           if (data.initiator) {
             conn = peer.connect(data.partnerId);
             conn.on("open", () => {
@@ -192,74 +570,44 @@
               currentCall = peer.call(data.partnerId, localStream);
               currentCall.on("stream", (remoteStream) => {
                 document.getElementById("peerVideo").srcObject = remoteStream;
-                document.getElementById("screen-btn").disabled = false;
+                document.getElementById("screenBtn").disabled = false;
+                callStatus("Verbonden");
               });
             });
           }
         });
-
-        socket.on("room-full", (msg) => updateStatus(msg));
-        socket.on("peer-left", (msg) => {
-          updateStatus(msg);
-          document.getElementById("peerVideo").srcObject = null;
-          document.getElementById("screen-btn").disabled = true;
-        });
-      }
-
-      function copyLink() {
-        navigator.clipboard.writeText(window.location.href);
-        updateStatus("Link gekopieerd! Deel deze met de ander.");
-      }
-
-      function endCall() {
-        if (conn) conn.close();
-        if (currentCall) currentCall.close();
-        if (socket) socket.disconnect();
-        updateStatus("Call beëindigd.");
-        document.getElementById("peerVideo").srcObject = null;
       }
 
       function setupDataListeners() {
-        conn.on("open", () => updateStatus("Verbonden!"));
+        conn.on("open", () => callStatus("Verbonden"));
         conn.on("data", (data) => {
-          if (data.type === "text") appendMessage("Gast", data.message);
-          if (data.type === "file") {
-            const blob = new Blob([data.fileData], { type: data.fileType });
-            const url = URL.createObjectURL(blob);
-            appendMessage(
-              "Gast stuurde bestand",
-              `<a href="${url}" download="${data.fileName}">Download ${data.fileName}</a>`,
-            );
-          }
+          if (data.type === "text") appendMessage("Gast", data.message, false);
         });
-        conn.on("close", () => updateStatus("Verbinding verbroken."));
+        conn.on("close", () => callStatus("Verbinding verbroken"));
       }
 
-      function sendMessage() {
-        const input = document.getElementById("msgInput");
-        if (!conn || !input.value) return;
-        conn.send({ type: "text", message: input.value });
-        appendMessage("Jij", input.value);
-        input.value = "";
+      function toggleMute() {
+        isMuted = !isMuted;
+        localStream.getAudioTracks().forEach((t) => (t.enabled = !isMuted));
+        document.getElementById("muteBtn").classList.toggle("active", isMuted);
       }
 
-      function sendFile() {
-        const file = document.getElementById("fileInput").files[0];
-        if (!file || !conn) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          conn.send({
-            type: "file",
-            fileData: e.target.result,
-            fileName: file.name,
-            fileType: file.type,
-          });
-          appendMessage("Jij", `Bestand verzonden: ${file.name}`);
-        };
-        reader.readAsArrayBuffer(file);
+      function toggleVideo() {
+        isVideoOff = !isVideoOff;
+        localStream.getVideoTracks().forEach((t) => (t.enabled = !isVideoOff));
+        document
+          .getElementById("videoBtn")
+          .classList.toggle("active", isVideoOff);
+        const ov = document.getElementById("videoOffOverlay");
+        ov.style.display = isVideoOff ? "flex" : "none";
+        if (isSharingScreen && !isVideoOff) stopScreenShare();
       }
 
       async function shareScreen() {
+        if (isSharingScreen) {
+          stopScreenShare();
+          return;
+        }
         try {
           const screen = await navigator.mediaDevices.getDisplayMedia({
             video: true,
@@ -267,26 +615,75 @@
           const track = screen.getVideoTracks()[0];
           const sender = currentCall.peerConnection
             .getSenders()
-            .find((s) => s.track.kind === "video");
+            .find((s) => s.track && s.track.kind === "video");
           sender.replaceTrack(track);
           document.getElementById("localVideo").srcObject = screen;
-          track.onended = () => {
-            sender.replaceTrack(localStream.getVideoTracks()[0]);
-            document.getElementById("localVideo").srcObject = localStream;
-          };
-        } catch (err) {
-          console.error(err);
+          isSharingScreen = true;
+          document.getElementById("screenBtn").classList.add("active");
+          track.onended = () => stopScreenShare();
+        } catch (e) {
+          console.error(e);
         }
       }
 
-      function updateStatus(msg) {
-        document.getElementById("status").innerText = msg;
+      function stopScreenShare() {
+        const sender = currentCall.peerConnection
+          .getSenders()
+          .find((s) => s.track && s.track.kind === "video");
+        sender.replaceTrack(localStream.getVideoTracks()[0]);
+        document.getElementById("localVideo").srcObject = localStream;
+        isSharingScreen = false;
+        document.getElementById("screenBtn").classList.remove("active");
       }
-      function appendMessage(sender, message) {
-        const box = document.getElementById("chatBox");
-        box.innerHTML += `<p><strong>${sender}:</strong> ${message}</p>`;
+
+      function toggleChat() {
+        const panel = document.getElementById("chatPanel");
+        panel.classList.toggle("open");
+        document
+          .getElementById("chatBtn")
+          .classList.toggle("active", panel.classList.contains("open"));
+      }
+
+      function sendMessage() {
+        const input = document.getElementById("msgInput");
+        if (!conn || !input.value.trim()) return;
+        conn.send({ type: "text", message: input.value });
+        appendMessage("Jij", input.value, true);
+        input.value = "";
+      }
+
+      function appendMessage(sender, message, mine) {
+        const box = document.getElementById("chatMessages");
+        const div = document.createElement("div");
+        div.className = "chat-msg" + (mine ? " mine" : "");
+        div.innerHTML = `<div class="sender">${sender}</div><div class="bubble">${message}</div>`;
+        box.appendChild(div);
         box.scrollTop = box.scrollHeight;
+        if (!document.getElementById("chatPanel").classList.contains("open"))
+          toggleChat();
       }
+
+      function copyLink() {
+        navigator.clipboard.writeText(
+          document.getElementById("roomLink").value,
+        );
+        callStatus("Link gekopieerd!");
+        setTimeout(() => callStatus("Verbonden"), 2000);
+      }
+
+      function endCall() {
+        if (conn) conn.close();
+        if (currentCall) currentCall.close();
+        if (socket) socket.disconnect();
+        if (localStream) localStream.getTracks().forEach((t) => t.stop());
+        window.location.href = window.location.pathname;
+      }
+
+      window.onload = function () {
+        const params = new URLSearchParams(window.location.search);
+        const room = params.get("room");
+        if (room) document.getElementById("roomInput").value = room;
+      };
     </script>
   </body>
 </html>
