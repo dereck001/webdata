@@ -3,8 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Anonieme Matchmaking Chat</title>
-    <!-- Externe libraries inladen via CDN -->
+    <title>Privé Video Call</title>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
@@ -29,6 +28,19 @@
         font-weight: bold;
         text-align: center;
       }
+      .link-box {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+      }
+      .link-box input {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 13px;
+        background: #f9f9f9;
+      }
       .video-container {
         display: flex;
         gap: 10px;
@@ -38,10 +50,9 @@
         width: 48%;
         background: #000;
         border-radius: 4px;
-        transform: scaleX(-1);
       }
-      #peerVideo {
-        transform: none;
+      #localVideo {
+        transform: scaleX(-1);
       }
       .chat-box {
         border: 1px solid #ccc;
@@ -62,26 +73,39 @@
         padding: 10px;
         cursor: pointer;
       }
-      .next-btn {
-        background: #ff5722;
+      .copy-btn {
+        background: #1976d2;
         color: white;
         border: none;
         border-radius: 4px;
-        font-weight: bold;
+      }
+      .end-btn {
+        background: #e53935;
+        color: white;
+        border: none;
+        border-radius: 4px;
       }
     </style>
   </head>
   <body>
     <div class="container">
-      <h2>Anonieme WebRTC Matchmaker</h2>
-      <div class="status-bar" id="status">Systeem opstarten...</div>
+      <h2>Privé Video Call</h2>
+      <div class="status-bar" id="status">Opstarten...</div>
+
+      <div class="link-box">
+        <input
+          type="text"
+          id="roomLink"
+          readonly
+          placeholder="Link wordt gegenereerd..."
+        />
+        <button class="copy-btn" onclick="copyLink()">Kopieer link</button>
+        <button class="end-btn" onclick="endCall()">Verbreek</button>
+      </div>
 
       <div class="controls">
-        <button class="next-btn" onclick="startMatchmaking()">
-          Volgende Vreemde ➔
-        </button>
         <button id="screen-btn" onclick="shareScreen()" disabled>
-          Deel Scherm
+          Deel scherm
         </button>
       </div>
 
@@ -91,7 +115,6 @@
       </div>
 
       <div class="chat-box" id="chatBox"></div>
-
       <div class="controls">
         <input
           type="text"
@@ -102,25 +125,28 @@
         />
         <button onclick="sendMessage()">Verzend</button>
       </div>
-
       <div class="controls">
-        <label>Bestand delen (P2P):</label>
+        <label>Bestand (P2P):</label>
         <input type="file" id="fileInput" onchange="sendFile()" />
       </div>
     </div>
 
     <script>
-      let socket;
-      let peer;
-      let conn;
-      let currentCall;
-      let localStream;
+      let socket, peer, conn, currentCall, localStream;
+      let roomId;
 
-      window.onload = function () {
-        setupLocalVideo();
-      };
+      window.onload = async function () {
+        // Haal roomId uit URL of genereer een nieuwe
+        const params = new URLSearchParams(window.location.search);
+        roomId = params.get("room") || Math.random().toString(36).slice(2, 9);
 
-      async function setupLocalVideo() {
+        // Update URL zonder reload zodat de link deelbaar is
+        if (!params.get("room")) {
+          history.replaceState(null, "", `?room=${roomId}`);
+        }
+
+        document.getElementById("roomLink").value = window.location.href;
+
         try {
           localStream = await navigator.mediaDevices.getUserMedia({
             video: true,
@@ -130,23 +156,17 @@
           initConnections();
         } catch (err) {
           updateStatus("Cameratoegang geweigerd of niet gevonden.");
-          console.error(err);
         }
-      }
+      };
 
       function initConnections() {
         socket = io("https://webdata-backend.onrender.com");
-
         peer = new Peer();
 
         peer.on("open", (id) => {
-          updateStatus("Klaar om te zoeken. Klik op 'Volgende Vreemde'.");
+          socket.emit("join-room", { roomId, peerId: id });
         });
 
-        peer.on("connection", (connection) => {
-          conn = connection;
-          setupDataListeners();
-        });
         peer.on("call", (call) => {
           currentCall = call;
           call.answer(localStream);
@@ -156,19 +176,19 @@
           });
         });
 
-        socket.on("waiting", (msg) => {
-          updateStatus(msg);
-          resetPeerInterface();
+        peer.on("connection", (connection) => {
+          conn = connection;
+          setupDataListeners();
         });
+
+        socket.on("waiting", (msg) => updateStatus(msg));
 
         socket.on("matched", (data) => {
           updateStatus("Match gevonden! Verbinding maken...");
-
           if (data.initiator) {
             conn = peer.connect(data.partnerId);
             conn.on("open", () => {
               setupDataListeners();
-
               currentCall = peer.call(data.partnerId, localStream);
               currentCall.on("stream", (remoteStream) => {
                 document.getElementById("peerVideo").srcObject = remoteStream;
@@ -177,34 +197,42 @@
             });
           }
         });
+
+        socket.on("room-full", (msg) => updateStatus(msg));
+        socket.on("peer-left", (msg) => {
+          updateStatus(msg);
+          document.getElementById("peerVideo").srcObject = null;
+          document.getElementById("screen-btn").disabled = true;
+        });
       }
 
-      function startMatchmaking() {
-        if (!peer || !peer.id) return alert("PeerJS is nog niet klaar.");
+      function copyLink() {
+        navigator.clipboard.writeText(window.location.href);
+        updateStatus("Link gekopieerd! Deel deze met de ander.");
+      }
+
+      function endCall() {
         if (conn) conn.close();
         if (currentCall) currentCall.close();
-
-        document.getElementById("chatBox").innerHTML = "";
-        socket.emit("join-matchmaking", peer.id);
+        if (socket) socket.disconnect();
+        updateStatus("Call beëindigd.");
+        document.getElementById("peerVideo").srcObject = null;
       }
 
       function setupDataListeners() {
-        conn.on("open", () => {
-          updateStatus("Verbonden met een vreemde!");
-        });
+        conn.on("open", () => updateStatus("Verbonden!"));
         conn.on("data", (data) => {
-          if (data.type === "text") appendMessage("Vreemde", data.message);
+          if (data.type === "text") appendMessage("Gast", data.message);
           if (data.type === "file") {
             const blob = new Blob([data.fileData], { type: data.fileType });
             const url = URL.createObjectURL(blob);
-            const link = `<a href="${url}" download="${data.fileName}">Download ${data.fileName}</a>`;
-            appendMessage("Vreemde stuurde bestand", link);
+            appendMessage(
+              "Gast stuurde bestand",
+              `<a href="${url}" download="${data.fileName}">Download ${data.fileName}</a>`,
+            );
           }
         });
-        conn.on("close", () => {
-          updateStatus("Vreemde heeft de chat verlaten.");
-          resetPeerInterface();
-        });
+        conn.on("close", () => updateStatus("Verbinding verbroken."));
       }
 
       function sendMessage() {
@@ -216,15 +244,13 @@
       }
 
       function sendFile() {
-        const fileInput = document.getElementById("fileInput");
-        const file = fileInput.files[0];
+        const file = document.getElementById("fileInput").files[0];
         if (!file || !conn) return;
-
         const reader = new FileReader();
-        reader.onload = function (event) {
+        reader.onload = (e) => {
           conn.send({
             type: "file",
-            fileData: event.target.result,
+            fileData: e.target.result,
             fileName: file.name,
             fileType: file.type,
           });
@@ -235,19 +261,17 @@
 
       async function shareScreen() {
         try {
-          const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          const screen = await navigator.mediaDevices.getDisplayMedia({
             video: true,
           });
-          const videoTrack = screenStream.getVideoTracks()[0];
+          const track = screen.getVideoTracks()[0];
           const sender = currentCall.peerConnection
             .getSenders()
             .find((s) => s.track.kind === "video");
-          sender.replaceTrack(videoTrack);
-          document.getElementById("localVideo").srcObject = screenStream;
-
-          videoTrack.onended = () => {
-            const localVideoTrack = localStream.getVideoTracks()[0];
-            sender.replaceTrack(localVideoTrack);
+          sender.replaceTrack(track);
+          document.getElementById("localVideo").srcObject = screen;
+          track.onended = () => {
+            sender.replaceTrack(localStream.getVideoTracks()[0]);
             document.getElementById("localVideo").srcObject = localStream;
           };
         } catch (err) {
@@ -255,18 +279,13 @@
         }
       }
 
-      function resetPeerInterface() {
-        document.getElementById("peerVideo").srcObject = null;
-        document.getElementById("screen-btn").disabled = true;
-      }
-
       function updateStatus(msg) {
         document.getElementById("status").innerText = msg;
       }
       function appendMessage(sender, message) {
-        const chatBox = document.getElementById("chatBox");
-        chatBox.innerHTML += `<p><strong>${sender}:</strong> ${message}</p>`;
-        chatBox.scrollTop = chatBox.scrollHeight;
+        const box = document.getElementById("chatBox");
+        box.innerHTML += `<p><strong>${sender}:</strong> ${message}</p>`;
+        box.scrollTop = box.scrollHeight;
       }
     </script>
   </body>
